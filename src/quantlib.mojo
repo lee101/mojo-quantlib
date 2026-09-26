@@ -1,8 +1,7 @@
 """Date, term-structure, and option-pricing kernels behind mojo-quantlib."""
 
-from std.algorithm.functional import parallelize
-from std.gpu import global_idx
-from std.gpu.host import DeviceContext
+from max.gpu import global_idx
+from max.gpu.host import DeviceContext
 from std.math import exp, log, pow, sqrt
 from std.sys import simd_width_of as simdwidthof
 
@@ -322,19 +321,23 @@ def implied_stddev_simd[width: Int](
 
 def implied_stddev_gpu_kernel(
     types: IPtr, strikes: FPtr, forwards: FPtr, prices: FPtr,
-    discounts: FPtr, displacements: FPtr, result: FPtr, n: Int,
-    accuracy: Float64, max_iterations: Int, scalar_mask: Int,
+    discounts: FPtr, displacements: FPtr, result: FPtr, n: Int64,
+    accuracy: Float64, max_iterations: Int64, scalar_mask: Int64,
 ):
+    # Device-passable scalars must be fixed-width; 1.2.0 rejects `Int` here.
     var index = Int(global_idx.x)
-    if index < n:
+    var count = Int(n)
+    var mask = Int(scalar_mask)
+    var iterations = Int(max_iterations)
+    if index < count:
         result[index] = implied_stddev_value(
-            Int(i_at(types, index, scalar_mask, 1)),
-            f_at(strikes, index, scalar_mask, 2),
-            f_at(forwards, index, scalar_mask, 4),
-            f_at(prices, index, scalar_mask, 8),
-            f_at(discounts, index, scalar_mask, 16),
-            f_at(displacements, index, scalar_mask, 32),
-            accuracy, max_iterations,
+            Int(i_at(types, index, mask, 1)),
+            f_at(strikes, index, mask, 2),
+            f_at(forwards, index, mask, 4),
+            f_at(prices, index, mask, 8),
+            f_at(discounts, index, mask, 16),
+            f_at(displacements, index, mask, 32),
+            accuracy, iterations,
         )
 
 
@@ -548,7 +551,8 @@ def mql_black_implied_stddev(
             )
 
     var chunks = (n + chunk_size - 1) // chunk_size
-    parallelize(solve_chunk, chunks, min(chunks, 16))
+    for chunk in range(chunks):
+        solve_chunk(chunk)
     return 0
 
 
@@ -610,8 +614,8 @@ def mql_black_implied_stddev_gpu(
         ctx.enqueue_copy(disp_d, disp)
         comptime block_size = 256
         ctx.enqueue_function[implied_stddev_gpu_kernel](
-            types_d, k_d, f_d, prices_d, disc_d, disp_d, result_d, n,
-            accuracy, max_iterations, scalar_mask,
+            types_d, k_d, f_d, prices_d, disc_d, disp_d, result_d, Int64(n),
+            accuracy, Int64(max_iterations), Int64(scalar_mask),
             grid_dim=(n + block_size - 1) // block_size,
             block_dim=block_size,
         )
