@@ -254,7 +254,7 @@ def implied_stddev_simd[width: Int](
 ):
     var type_values = (
         SIMD[DType.int64, width](types[0])
-        if scalar_mask & 1 else types.load[width=width](index)
+        if scalar_mask & 1 else types.unsafe_load[width=width](index)
     )
     var type_mask = type_values.gt(0)
     var sign = type_mask.select(
@@ -263,23 +263,23 @@ def implied_stddev_simd[width: Int](
     )
     var strike = (
         SIMD[DType.float64, width](strikes[0])
-        if scalar_mask & 2 else strikes.load[width=width](index)
+        if scalar_mask & 2 else strikes.unsafe_load[width=width](index)
     )
     var forward = (
         SIMD[DType.float64, width](forwards[0])
-        if scalar_mask & 4 else forwards.load[width=width](index)
+        if scalar_mask & 4 else forwards.unsafe_load[width=width](index)
     )
     var price = (
         SIMD[DType.float64, width](prices[0])
-        if scalar_mask & 8 else prices.load[width=width](index)
+        if scalar_mask & 8 else prices.unsafe_load[width=width](index)
     )
     var discount = (
         SIMD[DType.float64, width](discounts[0])
-        if scalar_mask & 16 else discounts.load[width=width](index)
+        if scalar_mask & 16 else discounts.unsafe_load[width=width](index)
     )
     var displacement = (
         SIMD[DType.float64, width](displacements[0])
-        if scalar_mask & 32 else displacements.load[width=width](index)
+        if scalar_mask & 32 else displacements.unsafe_load[width=width](index)
     )
     var intrinsic = discount * max(sign * (forward - strike), 0.0)
     var lo = SIMD[DType.float64, width](0.0)
