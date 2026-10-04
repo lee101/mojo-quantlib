@@ -106,6 +106,8 @@ class YieldTermStructure:
         return self.timeFromReference(self.maxDate())
 
     def _times_from_input(self, value):
+        if type(value) is np.ndarray and value.ndim == 1 and value.dtype.kind in "biuf":
+            return np.ascontiguousarray(value, dtype=np.float64), False
         scalar = isinstance(value, (Date, int, float, np.number))
         values = [value] if scalar else list(value)
         times = [

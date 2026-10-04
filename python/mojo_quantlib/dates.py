@@ -230,24 +230,14 @@ def _as_date(value) -> Date:
 
 def date_serials(years, months, days):
     years, months, days = np.broadcast_arrays(i64(years), i64(months), i64(days))
-    leap = (years % 4 == 0) & ((years % 100 != 0) | (years % 400 == 0))
-    lengths = np.choose(
-        months - 1,
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
-        mode="clip",
-    ) + ((months == 2) & leap)
-    if (
-        np.any((years < Date.min_year) | (years > Date.max_year))
-        or np.any((months < 1) | (months > 12))
-        or np.any((days < 1) | (days > lengths))
-    ):
-        raise ValueError("invalid date component")
     shape = years.shape
     years, months, days = (np.ascontiguousarray(x.ravel()) for x in (years, months, days))
     result = np.empty(years.size, dtype=np.int64)
-    lib().mql_dates_to_serial(
+    failed = lib().mql_dates_to_serial(
         addr(years), addr(months), addr(days), addr(result), result.size
     )
+    if failed:
+        raise ValueError("invalid date component")
     return result.reshape(shape)
 
 
@@ -584,6 +574,14 @@ class ActualActual(DayCounter):
         return total + (last - cursor) / (366.0 if Date.isLeap(last.year()) else 365.0)
 
 
+def _serials(dates) -> np.ndarray:
+    if type(dates) is np.ndarray and dates.dtype.kind in "iu":
+        return np.ascontiguousarray(dates, dtype=np.int64)
+    if type(dates) is list and dates and type(dates[0]) is Date:
+        return np.array([d._serial for d in dates], dtype=np.int64)
+    return i64(dates)
+
+
 def year_fractions(starts: Iterable[Date], ends: Iterable[Date], day_counter: DayCounter):
     starts = list(starts)
     ends = list(ends)
@@ -592,8 +590,8 @@ def year_fractions(starts: Iterable[Date], ends: Iterable[Date], day_counter: Da
     if isinstance(day_counter, (Actual365Fixed, Actual360)) and not (
         isinstance(day_counter, Actual365Fixed) and day_counter.convention != Actual365Fixed.Standard
     ):
-        a = i64([d.serialNumber() for d in starts])
-        b = i64([d.serialNumber() for d in ends])
+        a = _serials(starts)
+        b = _serials(ends)
         result = np.empty(len(a), dtype=np.float64)
         basis = 1 if isinstance(day_counter, Actual360) else 0
         lib().mql_year_fractions(addr(a), addr(b), addr(result), len(a), basis)

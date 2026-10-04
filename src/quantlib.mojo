@@ -344,13 +344,26 @@ def implied_stddev_gpu_kernel(
 @export("mql_dates_to_serial")
 def mql_dates_to_serial(
     years: Int, months: Int, days: Int, dst: Int, n: Int
-) abi("C"):
+) abi("C") -> Int:
     var yp = ip(years)
     var mp = ip(months)
     var dp = ip(days)
     var result = ip(dst)
     for i in range(n):
-        result[i] = date_to_serial(Int(yp[i]), Int(mp[i]), Int(dp[i]))
+        var year = Int(yp.unsafe_load(i))
+        var month = Int(mp.unsafe_load(i))
+        var day = Int(dp.unsafe_load(i))
+        if (
+            year < 1901
+            or year > 2199
+            or month < 1
+            or month > 12
+            or day < 1
+            or day > month_length(year, month)
+        ):
+            return i + 1
+        result.unsafe_store(i, date_to_serial(year, month, day))
+    return 0
 
 
 @export("mql_serial_to_dates")

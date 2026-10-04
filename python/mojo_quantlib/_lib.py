@@ -16,7 +16,7 @@ I = ctypes.c_int64
 F = ctypes.c_double
 
 _SIGNATURES = {
-    "mql_dates_to_serial": ([I, I, I, I, I], None),
+    "mql_dates_to_serial": ([I, I, I, I, I], I),
     "mql_serial_to_dates": ([I, I, I, I, I], None),
     "mql_year_fractions": ([I, I, I, I, I], None),
     "mql_discount_curve": ([I, I, I, I, I, I], None),
@@ -66,11 +66,11 @@ def f64(value) -> np.ndarray:
     array = np.asarray(value)
     if array.dtype.kind not in "biuf":
         raise TypeError("expected real numeric values")
-    if array.dtype.kind in "iu" and array.size and np.any(
-        np.abs(array.astype(object)) > 2**53
+    if array.dtype.kind in "iu" and array.size and (
+        np.any(array > 2**53) or np.any(array < -(2**53))
     ):
         raise OverflowError("integer cannot be represented exactly as float64")
-    result = np.asarray(array, dtype=np.float64).copy(order="C")
+    result = np.ascontiguousarray(array, dtype=np.float64).reshape(array.shape)
     if not np.all(np.isfinite(result)):
         raise ValueError("values must be finite")
     return result
@@ -80,9 +80,11 @@ def i64(value) -> np.ndarray:
     array = np.asarray(value)
     if array.dtype.kind not in "biu":
         raise TypeError("expected integer values")
-    if array.dtype.kind == "u" and array.size and np.any(array > np.iinfo(np.int64).max):
+    if array.dtype.kind == "u" and array.size and np.any(
+        array > np.iinfo(np.int64).max
+    ):
         raise OverflowError("integer is outside the int64 range")
-    return np.asarray(array, dtype=np.int64).copy(order="C")
+    return np.ascontiguousarray(array, dtype=np.int64).reshape(array.shape)
 
 
 def addr(array: np.ndarray) -> int:
